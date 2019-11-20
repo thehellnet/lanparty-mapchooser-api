@@ -1,5 +1,6 @@
 import json
 import random
+import re
 import socket
 import time
 
@@ -44,6 +45,9 @@ class CommandSender:
         self._rcon_password = rcon_password
 
     def send(self, command=""):
+        self.send_recv(command)
+
+    def send_recv(self, command=""):
         if not command:
             return
 
@@ -53,7 +57,10 @@ class CommandSender:
 
         sck = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
         sck.sendto(data, (self._address, self._port))
+        data = sck.recv(1024)
         sck.close()
+
+        return data
 
     def map_change(self, g_gametype="", map_tag=""):
         if not g_gametype or not map_tag:
@@ -65,6 +72,18 @@ class CommandSender:
 
         self.send("map %s" % map_tag)
 
+    def map_name(self):
+        raw_data = self.send_recv("mapname").replace(b"\xff", b"").decode()
+
+        map_tag = None
+
+        rg = re.compile(".*is:\"([a-zA-Z0-9^]+)\".*", re.IGNORECASE | re.DOTALL)
+        m = rg.search(raw_data)
+        if m:
+            map_tag = m.group(1).split("^")[0]
+
+        return map_tag
+
     def map_restart(self):
         self.send("map_restart")
 
@@ -74,7 +93,7 @@ class CommandSender:
 
 sender = CommandSender(
     address="127.0.0.1",
-    port=28960,
+    port=27960,
     rcon_password="password"
 )
 
@@ -149,6 +168,16 @@ def map_run():
         g_gametype=g_gametype,
         map_tag=map_tag
     )
+
+    return response_ok(map_tag=map_tag)
+
+
+@app.route(
+    rule="/api/public/v1/mapName",
+    methods=["POST"]
+)
+def map_name():
+    map_tag = sender.map_name()
 
     return response_ok(map_tag=map_tag)
 
